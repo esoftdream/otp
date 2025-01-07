@@ -80,12 +80,16 @@ class OTP
             $OPTBuilder->delete();
         }
 
+        $now = Time::now();
+
         $OPTBuilder->insert([
             'otp_user_id'          => $this->userID,
             'otp_user_type'        => $this->userType,
             'otp_type'             => $this->type,
             'otp_value'            => password_hash($OTPCode, PASSWORD_DEFAULT),
             'otp_expired_datetime' => $OTPExpired,
+            'otp_updated_datetime' => $now->toDateTimeString(),
+            'otp_created_datetime' => $now->toDateTimeString(),
         ]);
 
         return (bool) ($this->db->affectedRows() > 0);
@@ -123,6 +127,7 @@ class OTP
         // model OTP
         $this->db->table('log_otp')
             ->set('otp_used_datetime', $now->toDateTimeString())
+            ->set('otp_updated_datetime', $now->toDateTimeString())
             ->where('otp_id', $data->otp_id)
             ->update();
 
