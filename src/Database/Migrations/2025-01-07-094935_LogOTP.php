@@ -60,12 +60,14 @@ class LogOTP extends Migration
         ]);
 
         $this->forge->addKey('otp_id', true);
-        $this->forge->createTable('log_otp');
+        $this->forge->createTable('log_otp', true, [
+            'comment' => 'Pencatatan log OTP untuk Admin & Member',
+        ]);
 
     }
 
     public function down()
     {
-        $this->forge->dropTable('log_otp');
+        $this->forge->dropTable('log_otp', true);
     }
 }
