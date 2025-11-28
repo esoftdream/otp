@@ -116,12 +116,12 @@ class OTP
             throw new Exception('Kode OTP salah / kode telah digunakan');
         }
 
-        if ($data->otp_expired_datetime < $now->toDateTimeString()) {
-            throw new Exception('Kode OTP sudah kedaluwarsa');
+        if (! password_verify($OTPCode, $data->otp_value)) {
+            throw new Exception('Kode OTP tidak valid');
         }
 
-        if (! password_verify($OTPCode, $data->otp_value)) {
-            throw new Exception('Kode OTP salah');
+        if ($data->otp_expired_datetime < $now->toDateTimeString()) {
+            throw new Exception('Kode OTP sudah kedaluwarsa');
         }
 
         // model OTP
@@ -134,3 +134,4 @@ class OTP
         return (bool) ($this->db->affectedRows() > 0);
     }
 }
+
