@@ -29,8 +29,12 @@ class OTPTest extends TestCase
 
         $this->builder->method('where')->willReturnSelf();
         
-        // delete() will be called once
-        $this->builder->expects($this->once())
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getRow')->willReturn(null);
+        $this->builder->method('get')->willReturn($resultMock);
+        
+        // delete() will NOT be called if getRow() is null
+        $this->builder->expects($this->never())
             ->method('delete');
 
         $this->builder->expects($this->once())
@@ -76,13 +80,14 @@ class OTPTest extends TestCase
 
         $this->builder->method('select')->willReturnSelf();
         $this->builder->method('where')->willReturnSelf();
-        $this->builder->method('orderBy')->willReturnSelf();
         $this->builder->method('get')->willReturn($resultMock);
         $this->builder->method('set')->willReturnSelf();
 
         $this->builder->expects($this->once())
             ->method('update')
             ->willReturn(true);
+
+        $this->db->method('affectedRows')->willReturn(1);
 
         $this->assertTrue($otp->verify($otpValue));
     }
@@ -107,7 +112,6 @@ class OTPTest extends TestCase
 
         $this->builder->method('select')->willReturnSelf();
         $this->builder->method('where')->willReturnSelf();
-        $this->builder->method('orderBy')->willReturnSelf();
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->expectException(Exception::class);
