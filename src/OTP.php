@@ -70,7 +70,8 @@ class OTP
         $OPTBuilder->where('otp_user_type', $this->userType);
         $OPTBuilder->where('otp_user_id', $this->userID);
         $OPTBuilder->where('otp_used_datetime IS NULL');
-        $OPTBuilder->where('DATE(otp_created_datetime) = DATE(NOW())');
+        $OPTBuilder->where('otp_created_datetime >=', date('Y-m-d 00:00:00'));
+        $OPTBuilder->where('otp_created_datetime <=', date('Y-m-d 23:59:59'));
 
         $datOTP = $OPTBuilder->get()->getRow();
 
@@ -134,4 +135,5 @@ class OTP
         return (bool) ($this->db->affectedRows() > 0);
     }
 }
+
 
