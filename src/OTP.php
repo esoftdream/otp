@@ -117,7 +117,8 @@ class OTP
             ->where('otp_user_type', $this->userType)
             ->where('otp_type', $this->type)
             ->where('otp_used_datetime IS NULL')
-            ->where('DATE(otp_created_datetime) = DATE(NOW())')
+            ->where('otp_created_datetime >=', date('Y-m-d 00:00:00'))
+            ->where('otp_created_datetime <=', date('Y-m-d 23:59:59'))
             ->get()
             ->getRowObject();
 
