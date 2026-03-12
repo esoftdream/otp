@@ -26,9 +26,9 @@ class OTP
 
     private BaseConnection $db;
 
-    public function __construct(string $userType, int $userID)
+    public function __construct(string $userType, int $userID, ?BaseConnection $db = null)
     {
-        $this->db = Database::connect();
+        $this->db = $db ?? \Config\Database::connect();
 
         $this->userType = $userType;
         $this->userID   = $userID;
@@ -41,7 +41,11 @@ class OTP
      */
     public function generate(): array
     {
-        $OTPCode    = random_string('numeric', 6);
+        if (empty($this->type)) {
+            throw new Exception('OTP type belum diset');
+        }
+
+        $OTPCode    = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         $OTPExpired = Time::now()->addMinutes(10)->toDateTimeString();
 
         $save = $this->save($OTPCode, $OTPExpired);
@@ -101,6 +105,10 @@ class OTP
      */
     public function verify(string $OTPCode): bool
     {
+        if (empty($this->type)) {
+            throw new Exception('OTP type belum diset');
+        }
+
         $now = Time::now();
 
         $data = $this->db->table('log_otp')
@@ -109,7 +117,8 @@ class OTP
             ->where('otp_user_type', $this->userType)
             ->where('otp_type', $this->type)
             ->where('otp_used_datetime IS NULL')
-            ->where('DATE(otp_created_datetime) = DATE(NOW())')
+            ->where('otp_created_datetime >=', date('Y-m-d 00:00:00'))
+            ->where('otp_created_datetime <=', date('Y-m-d 23:59:59'))
             ->get()
             ->getRowObject();
 
