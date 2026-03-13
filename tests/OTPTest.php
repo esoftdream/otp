@@ -119,4 +119,70 @@ class OTPTest extends TestCase
 
         $otp->verify($otpValue);
     }
+
+    public function testVerifyWrongCodeFails()
+    {
+        $otpValue = '123456';
+        $wrongValue = '654321';
+        $hashedValue = password_hash($otpValue, PASSWORD_DEFAULT);
+        $expiredAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'forgot';
+
+        $mockData = (object)[
+            'otp_id' => 10,
+            'otp_value' => $hashedValue,
+            'otp_expired_datetime' => $expiredAt
+        ];
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getRowObject')->willReturn($mockData);
+
+        $this->builder->method('select')->willReturnSelf();
+        $this->builder->method('where')->willReturnSelf();
+        $this->builder->method('get')->willReturn($resultMock);
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Kode OTP tidak valid');
+
+        $otp->verify($wrongValue);
+    }
+
+    public function testVerifyNotFoundFails()
+    {
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'forgot';
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getRowObject')->willReturn(null);
+
+        $this->builder->method('select')->willReturnSelf();
+        $this->builder->method('where')->willReturnSelf();
+        $this->builder->method('get')->willReturn($resultMock);
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Kode OTP salah / kode telah digunakan');
+
+        $otp->verify('123456');
+    }
+
+    public function testVerifyWrongTypeFails()
+    {
+        // Skenario: Di DB ada OTP untuk type 'forgot', tapi kita verifikasi dengan type 'profile'
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'profile'; 
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getRowObject')->willReturn(null); // Tidak ditemukan karena type beda
+
+        $this->builder->method('select')->willReturnSelf();
+        $this->builder->method('where')->willReturnSelf();
+        $this->builder->method('get')->willReturn($resultMock);
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Kode OTP salah / kode telah digunakan');
+
+        $otp->verify('123456');
+    }
 }

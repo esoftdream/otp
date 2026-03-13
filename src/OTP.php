@@ -28,7 +28,7 @@ class OTP
 
     public function __construct(string $userType, int $userID, ?BaseConnection $db = null)
     {
-        $this->db = $db ?? \Config\Database::connect();
+        $this->db = $db ?? Database::connect();
 
         $this->userType = $userType;
         $this->userID   = $userID;
