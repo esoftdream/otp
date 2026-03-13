@@ -11,7 +11,7 @@
     ],
     "require": {
         "codeigniter4/framework": "^4",
-        "doctrine/instantiator": "^1.4"
+        "doctrine/instantiator": "^1.4 || ^2.0"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
