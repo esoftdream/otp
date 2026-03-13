@@ -10,6 +10,7 @@
         }
     ],
     "require": {
+        "php": "^7.0||^8.0"
         "codeigniter4/framework": "^4",
         "doctrine/instantiator": "^1.4"
     },
@@ -34,4 +35,5 @@
     "require-dev": {
         "phpunit/phpunit": "^9 || ^13"
     }
+
 }
