@@ -45,8 +45,9 @@ class OTP
             throw new Exception('OTP type belum diset');
         }
 
+        $now        = Time::now();
         $OTPCode    = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $OTPExpired = Time::now()->addMinutes(10)->toDateTimeString();
+        $OTPExpired = $now->addMinutes(10)->toDateTimeString();
 
         $save = $this->save($OTPCode, $OTPExpired);
 
@@ -69,13 +70,18 @@ class OTP
         // OTP builder
         $OPTBuilder = $this->db->table('log_otp');
 
+        $now = Time::now();
+
+        $startDay = $now->setTime(0, 0, 0)->toDateTimeString();
+        $endDay   = $now->setTime(23, 59, 59)->toDateTimeString();
+
         // cek dulu apakah ada data sebelumnya
         $OPTBuilder->where('otp_type', $this->type);
         $OPTBuilder->where('otp_user_type', $this->userType);
         $OPTBuilder->where('otp_user_id', $this->userID);
         $OPTBuilder->where('otp_used_datetime IS NULL');
-        $OPTBuilder->where('otp_created_datetime >=', date('Y-m-d 00:00:00'));
-        $OPTBuilder->where('otp_created_datetime <=', date('Y-m-d 23:59:59'));
+        $OPTBuilder->where('otp_created_datetime >=', $startDay);
+        $OPTBuilder->where('otp_created_datetime <=', $endDay);
 
         $datOTP = $OPTBuilder->get()->getRow();
 
@@ -84,8 +90,6 @@ class OTP
             $OPTBuilder->where('otp_id', $datOTP->otp_id);
             $OPTBuilder->delete();
         }
-
-        $now = Time::now();
 
         $OPTBuilder->insert([
             'otp_user_id'          => $this->userID,
@@ -111,14 +115,17 @@ class OTP
 
         $now = Time::now();
 
+        $startDay = $now->setTime(0, 0, 0)->toDateTimeString();
+        $endDay   = $now->setTime(23, 59, 59)->toDateTimeString();
+
         $data = $this->db->table('log_otp')
             ->select('otp_id, otp_expired_datetime, otp_used_datetime, otp_value')
             ->where('otp_user_id', $this->userID)
             ->where('otp_user_type', $this->userType)
             ->where('otp_type', $this->type)
             ->where('otp_used_datetime IS NULL')
-            ->where('otp_created_datetime >=', date('Y-m-d 00:00:00'))
-            ->where('otp_created_datetime <=', date('Y-m-d 23:59:59'))
+            ->where('otp_created_datetime >=', $startDay)
+            ->where('otp_created_datetime <=', $endDay)
             ->get()
             ->getRowObject();
 
@@ -144,5 +151,3 @@ class OTP
         return (bool) ($this->db->affectedRows() > 0);
     }
 }
-
-
