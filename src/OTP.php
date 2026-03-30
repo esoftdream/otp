@@ -72,8 +72,8 @@ class OTP
 
         $now = Time::now();
 
-        $startDay = $now->startOfDay()->toDateTimeString();
-        $endDay   = $now->endOfDay()->toDateTimeString();
+        $startDay = $now->setTime(0, 0, 0)->toDateTimeString();
+        $endDay   = $now->setTime(23, 59, 59)->toDateTimeString();
 
         // cek dulu apakah ada data sebelumnya
         $OPTBuilder->where('otp_type', $this->type);
@@ -115,8 +115,8 @@ class OTP
 
         $now = Time::now();
 
-        $startDay = $now->startOfDay()->toDateTimeString();
-        $endDay   = $now->endOfDay()->toDateTimeString();
+        $startDay = $now->setTime(0, 0, 0)->toDateTimeString();
+        $endDay   = $now->setTime(23, 59, 59)->toDateTimeString();
 
         $data = $this->db->table('log_otp')
             ->select('otp_id, otp_expired_datetime, otp_used_datetime, otp_value')
