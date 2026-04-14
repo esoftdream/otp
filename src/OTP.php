@@ -107,19 +107,14 @@ class OTP
     }
 
     /**
-     * Menyimpan OTP ke database dan menghapus OTP lama yang belum terpakai
+     * Menyimpan OTP ke database
      */
     private function saveToDatabase(string $otpCode, Time $expiredAt): bool
     {
         $now = Time::now('UTC')->toDateTimeString();
 
-        // Bersihkan OTP lama yang belum digunakan untuk user & tipe yang sama
-        $this->db->table('log_otp')->where([
-            'otp_user_id'       => $this->userId,
-            'otp_user_type'     => $this->userType,
-            'otp_type'          => $this->type,
-            'otp_used_datetime' => null,
-        ])->delete();
+        // Catatan: Kita tidak menghapus OTP lama di sini agar lebih resilien 
+        // jika ada delay pengiriman atau klik ganda oleh user.
 
         return $this->db->table('log_otp')->insert([
             'otp_user_id'          => $this->userId,
@@ -149,40 +144,43 @@ class OTP
         $otpInput = preg_replace('/[^0-9]/', '', $otpInput);
         $otpInput = str_pad($otpInput, $this->otpLength, '0', STR_PAD_LEFT);
 
-        // 2. Ambil data OTP terbaru
-        $data = $this->db->table('log_otp')
+        // 2. Ambil SEMUA OTP yang belum digunakan untuk user & tipe ini
+        // Menggunakan limit 10 untuk keamanan dan performa (user tidak boleh punya terlalu banyak OTP aktif)
+        $otpRecords = $this->db->table('log_otp')
             ->where([
-                'otp_user_id'   => $this->userId,
-                'otp_user_type' => $this->userType,
-                'otp_type'      => $this->type,
+                'otp_user_id'       => $this->userId,
+                'otp_user_type'     => $this->userType,
+                'otp_type'          => $this->type,
+                'otp_used_datetime' => null,
             ])
             ->orderBy('otp_id', 'DESC')
-            ->limit(1)
+            ->limit(10)
             ->get()
-            ->getRow();
+            ->getResult();
 
-        if (! $data) {
-            throw new Exception('Kode OTP tidak ditemukan');
+        if (empty($otpRecords)) {
+            throw new Exception('Kode OTP tidak ditemukan atau sudah digunakan');
         }
 
-        // 3. Cek Status Penggunaan
-        if ($data->otp_used_datetime !== null) {
-            throw new Exception('Kode OTP sudah digunakan');
+        $now = Time::now('UTC');
+
+        // 3. Iterasi melalui semua kode aktif untuk mencari yang cocok
+        foreach ($otpRecords as $data) {
+            // Cek Validitas Kode (Hashing)
+            if (password_verify($otpInput, $data->otp_value)) {
+                
+                // Cek Kedaluwarsa untuk record yang cocok ini
+                $expiredAt = Time::parse($data->otp_expired_datetime, 'UTC');
+                if ($now->isAfter($expiredAt)) {
+                    throw new Exception('Kode OTP sudah kedaluwarsa');
+                }
+
+                // 4. Jika valid, tandai hanya record ini sebagai terpakai
+                return $this->markAsUsed($data->otp_id);
+            }
         }
 
-        // 4. Cek Validitas Kode (Hashing)
-        if (! password_verify($otpInput, $data->otp_value)) {
-            throw new Exception('Kode OTP tidak valid');
-        }
-
-        // 5. Cek Kedaluwarsa (Gunakan UTC untuk perbandingan)
-        $expiredAt = Time::parse($data->otp_expired_datetime, 'UTC');
-        if (Time::now('UTC')->isAfter($expiredAt)) {
-            throw new Exception('Kode OTP sudah kedaluwarsa');
-        }
-
-        // 6. Tandai Terpakai
-        return $this->markAsUsed($data->otp_id);
+        throw new Exception('Kode OTP tidak valid');
     }
 
     /**
