@@ -127,7 +127,9 @@ class OTP
         if (empty($this->type)) {
             throw new RuntimeException('OTP type belum diset');
         }
-
+    
+        $this->db->transStart();
+    
         $data = $this->db->table('log_otp')
             ->select('otp_id, otp_expired_datetime, otp_value, otp_used_datetime')
             ->where([
@@ -135,34 +137,46 @@ class OTP
                 'otp_user_type' => $this->userType,
                 'otp_type'      => $this->type,
             ])
+            ->where('otp_used_datetime IS NULL', null, false)
             ->orderBy('otp_id', 'DESC')
             ->limit(1)
             ->get()
             ->getRow();
-
+    
         if (! $data) {
+            $this->db->transComplete();
             throw new Exception('Kode OTP tidak ditemukan');
         }
-
-        if ($data->otp_used_datetime !== null) {
-            throw new Exception('Kode OTP sudah digunakan');
-        }
-
-        if (! password_verify($OTPCode, $data->otp_value)) {
-            throw new Exception('Kode OTP tidak valid');
-        }
-
+    
+        // cek expired dulu (lebih cepat fail)
         if (Time::now()->isAfter(Time::parse($data->otp_expired_datetime))) {
+            $this->db->transComplete();
             throw new Exception('Kode OTP sudah kedaluwarsa');
         }
-
+    
+        // cek kode
+        if (! password_verify($OTPCode, $data->otp_value)) {
+            $this->db->transComplete();
+            throw new Exception('Kode OTP tidak valid');
+        }
+    
         $now = Time::now()->toDateTimeString();
-
-        return $this->db->table('log_otp')
+    
+        // update hanya jika belum dipakai (double safety)
+        $updated = $this->db->table('log_otp')
             ->where('otp_id', $data->otp_id)
+            ->where('otp_used_datetime IS NULL', null, false)
             ->update([
                 'otp_used_datetime'    => $now,
                 'otp_updated_datetime' => $now,
             ]);
+    
+        $this->db->transComplete();
+    
+        if (! $updated) {
+            throw new Exception('OTP sudah digunakan (race condition)');
+        }
+    
+        return true;
     }
 }
