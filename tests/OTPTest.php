@@ -21,10 +21,16 @@ class OTPTest extends TestCase
         $this->builder = $this->createMock(BaseBuilder::class);
         
         $this->db->method('table')->willReturn($this->builder);
+
+        // chaining
         $this->builder->method('select')->willReturnSelf();
         $this->builder->method('where')->willReturnSelf();
         $this->builder->method('orderBy')->willReturnSelf();
         $this->builder->method('limit')->willReturnSelf();
+
+        // transaction (WAJIB setelah refactor)
+        $this->db->method('transStart')->willReturn(null);
+        $this->db->method('transComplete')->willReturn(null);
     }
 
     public function testGenerateSuccess()
@@ -32,8 +38,7 @@ class OTPTest extends TestCase
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
 
-        $this->builder->expects($this->once())
-            ->method('delete');
+        // ❌ delete sudah dihapus → tidak perlu di-expect
 
         $this->builder->expects($this->once())
             ->method('insert')
@@ -74,6 +79,7 @@ class OTPTest extends TestCase
 
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getRow')->willReturn($mockData);
+
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->builder->expects($this->once())
@@ -101,6 +107,7 @@ class OTPTest extends TestCase
 
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getRow')->willReturn($mockData);
+
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->expectException(Exception::class);
@@ -111,29 +118,20 @@ class OTPTest extends TestCase
 
     public function testVerifyAlreadyUsedFails()
     {
-        $otpValue = '123456';
-        $hashedValue = password_hash($otpValue, PASSWORD_DEFAULT);
-        $expiredAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
-
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
 
-        // Mock data dengan otp_used_datetime yang sudah terisi
-        $mockData = (object)[
-            'otp_id' => 10,
-            'otp_value' => $hashedValue,
-            'otp_expired_datetime' => $expiredAt,
-            'otp_used_datetime' => date('Y-m-d H:i:s')
-        ];
-
+        // Karena sekarang query pakai "otp_used_datetime IS NULL"
+        // maka data used tidak akan pernah keambil → dianggap tidak ditemukan
         $resultMock = $this->createMock(BaseResult::class);
-        $resultMock->method('getRow')->willReturn($mockData);
+        $resultMock->method('getRow')->willReturn(null);
+
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->expectException(Exception::class);
-        $this->expectExceptionMessage('Kode OTP sudah digunakan');
+        $this->expectExceptionMessage('Kode OTP tidak ditemukan');
 
-        $otp->verify($otpValue);
+        $otp->verify('123456');
     }
 
     public function testVerifyWrongCodeFails()
@@ -155,6 +153,7 @@ class OTPTest extends TestCase
 
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getRow')->willReturn($mockData);
+
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->expectException(Exception::class);
@@ -170,6 +169,7 @@ class OTPTest extends TestCase
 
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getRow')->willReturn(null);
+
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->expectException(Exception::class);
@@ -180,11 +180,9 @@ class OTPTest extends TestCase
 
     public function testVerifyWrongTypeFails()
     {
-        // Skenario: Di DB ada OTP untuk type 'forgot', tapi kita verifikasi dengan type 'profile'
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'profile'; 
 
-        // Database tidak menemukan data karena filter 'otp_type' => 'profile' tidak cocok
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getRow')->willReturn(null);
 
