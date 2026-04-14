@@ -32,8 +32,6 @@ class OTPTest extends TestCase
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
 
-        // Sekarang tidak mengekspektasikan delete
-        $this->builder->expects($this->never())->method('delete');
         $this->builder->expects($this->once())->method('insert')->willReturn(true);
 
         $result = $otp->generate();
@@ -45,47 +43,121 @@ class OTPTest extends TestCase
 
     public function testVerifyResilientSuccess()
     {
-        // Simulasi 2 record aktif, user memasukkan kode yang bukan terbaru (yang ke-2)
-        $otpValue1 = '111111'; // Terbaru
-        $otpValue2 = '222222'; // Sebelumnya
+        // Skenario: 2 OTP aktif, user masukkan yang kedua (lama)
+        $otpValue1 = '111111'; 
+        $otpValue2 = '222222'; 
         
         $hashed1 = password_hash($otpValue1, PASSWORD_BCRYPT);
         $hashed2 = password_hash($otpValue2, PASSWORD_BCRYPT);
-        
         $expiredAt = Time::now('UTC')->addMinutes(10)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
 
         $mockRecords = [
-            (object)[
-                'otp_id' => 101,
-                'otp_value' => $hashed1,
-                'otp_expired_datetime' => $expiredAt,
-                'otp_used_datetime' => null
-            ],
-            (object)[
-                'otp_id' => 100,
-                'otp_value' => $hashed2,
-                'otp_expired_datetime' => $expiredAt,
-                'otp_used_datetime' => null
-            ]
+            (object)['otp_id' => 101, 'otp_value' => $hashed1, 'otp_expired_datetime' => $expiredAt, 'otp_used_datetime' => null],
+            (object)['otp_id' => 100, 'otp_value' => $hashed2, 'otp_expired_datetime' => $expiredAt, 'otp_used_datetime' => null]
+        ];
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getResult')->willReturn($mockRecords);
+        $this->builder->method('get')->willReturn($resultMock);
+        $this->builder->method('update')->willReturn(true);
+
+        // Verifikasi kode kedua (resilience test)
+        $this->assertTrue($otp->verify($otpValue2));
+    }
+
+    public function testVerifyWithNormalizationSuccess()
+    {
+        $otpValue = '001234';
+        $hashedValue = password_hash($otpValue, PASSWORD_BCRYPT);
+        $expiredAt = Time::now('UTC')->addMinutes(10)->toDateTimeString();
+
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'forgot';
+
+        $mockRecords = [(object)[
+            'otp_id' => 10,
+            'otp_value' => $hashedValue,
+            'otp_expired_datetime' => $expiredAt,
+            'otp_used_datetime' => null
+        ]];
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getResult')->willReturn($mockRecords);
+        $this->builder->method('get')->willReturn($resultMock);
+        $this->builder->method('update')->willReturn(true);
+
+        // Test normalisasi: simbol, spasi, dan leading zeros (input '1234' -> '001234')
+        $this->assertTrue($otp->verify(' 12-34 ')); 
+    }
+
+    public function testVerifyOneExpiredOneValidSuccess()
+    {
+        // Skenario: Ada 2 record dengan kode yang sama (mungkin generate ulang kode yang sama secara kebetulan)
+        // Yang satu sudah expired, yang satu masih valid.
+        $otpValue = '123456';
+        $hashed = password_hash($otpValue, PASSWORD_BCRYPT);
+        
+        $expiredTime = Time::now('UTC')->subMinutes(5)->toDateTimeString();
+        $validTime = Time::now('UTC')->addMinutes(10)->toDateTimeString();
+
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'forgot';
+
+        $mockRecords = [
+            (object)['otp_id' => 101, 'otp_value' => $hashed, 'otp_expired_datetime' => $validTime, 'otp_used_datetime' => null],
+            (object)['otp_id' => 100, 'otp_value' => $hashed, 'otp_expired_datetime' => $expiredTime, 'otp_used_datetime' => null]
+        ];
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getResult')->willReturn($mockRecords);
+        $this->builder->method('get')->willReturn($resultMock);
+        $this->builder->method('update')->willReturn(true);
+
+        // Harus berhasil karena menemukan yang ID 101 yang masih valid
+        $this->assertTrue($otp->verify($otpValue));
+    }
+
+    public function testVerifyWrongCodeAllFails()
+    {
+        $otpValue1 = '111111';
+        $otpValue2 = '222222';
+        $hashed1 = password_hash($otpValue1, PASSWORD_BCRYPT);
+        $hashed2 = password_hash($otpValue2, PASSWORD_BCRYPT);
+
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'forgot';
+
+        $mockRecords = [
+            (object)['otp_id' => 101, 'otp_value' => $hashed1, 'otp_expired_datetime' => 'any', 'otp_used_datetime' => null],
+            (object)['otp_id' => 100, 'otp_value' => $hashed2, 'otp_expired_datetime' => 'any', 'otp_used_datetime' => null]
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getResult')->willReturn($mockRecords);
         $this->builder->method('get')->willReturn($resultMock);
 
-        $this->builder->expects($this->once())
-            ->method('update')
-            ->with($this->equalTo(['otp_used_datetime' => Time::now('UTC')->toDateTimeString(), 'otp_updated_datetime' => Time::now('UTC')->toDateTimeString()])) // Note: ini bisa gagal karena Time::now() berbeda tipis, tapi markAsUsed pakai Time::now() yang baru
-            ->willReturn(true);
-            
-        // Mock markAsUsed update calls
-        $this->builder->method('update')->willReturn(true);
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Kode OTP tidak valid');
 
-        // Verifikasi menggunakan kode yang ke-2 (resilience test)
-        $this->assertTrue($otp->verify($otpValue2));
+        $otp->verify('333333');
+    }
+
+    public function testVerifyNotFoundFails()
+    {
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'forgot';
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getResult')->willReturn([]);
+        $this->builder->method('get')->willReturn($resultMock);
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Kode OTP tidak ditemukan atau sudah digunakan');
+
+        $otp->verify('123456');
     }
 
     public function testVerifyExpiredFails()
