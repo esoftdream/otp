@@ -177,4 +177,22 @@ class OTPTest extends TestCase
 
         $otp->verify('123456');
     }
+
+    public function testVerifyWrongTypeFails()
+    {
+        // Skenario: Di DB ada OTP untuk type 'forgot', tapi kita verifikasi dengan type 'profile'
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'profile'; 
+
+        // Database tidak menemukan data karena filter 'otp_type' => 'profile' tidak cocok
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getRow')->willReturn(null);
+
+        $this->builder->method('get')->willReturn($resultMock);
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Kode OTP tidak ditemukan');
+
+        $otp->verify('123456');
+    }
 }
