@@ -6,6 +6,7 @@ use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\I18n\Time;
 use Config\Database;
 use Exception;
+use RuntimeException;
 
 class OTP
 {
@@ -24,6 +25,16 @@ class OTP
      */
     private int $userID;
 
+    /**
+     * @var int Masa berlaku OTP dalam menit
+     */
+    protected int $expiryMinutes = 10;
+
+    /**
+     * @var int Panjang kode OTP
+     */
+    protected int $otpLength = 6;
+
     private BaseConnection $db;
 
     public function __construct(string $userType, int $userID, ?BaseConnection $db = null)
@@ -35,6 +46,24 @@ class OTP
     }
 
     /**
+     * Set masa berlaku OTP
+     */
+    public function setExpiry(int $minutes): self
+    {
+        $this->expiryMinutes = $minutes;
+        return $this;
+    }
+
+    /**
+     * Set panjang kode OTP
+     */
+    public function setLength(int $length): self
+    {
+        $this->otpLength = $length;
+        return $this;
+    }
+
+    /**
      * Generate kode OTP
      *
      * @return array Berisi kode otp & waktu kadaluarsa
@@ -42,12 +71,13 @@ class OTP
     public function generate(): array
     {
         if (empty($this->type)) {
-            throw new Exception('OTP type belum diset');
+            throw new RuntimeException('OTP type belum diset');
         }
 
         $now        = Time::now();
-        $OTPCode    = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $OTPExpired = $now->addMinutes(10)->toDateTimeString();
+        $max        = pow(10, $this->otpLength) - 1;
+        $OTPCode    = str_pad((string) random_int(0, $max), $this->otpLength, '0', STR_PAD_LEFT);
+        $OTPExpired = $now->addMinutes($this->expiryMinutes)->toDateTimeString();
 
         $save = $this->save($OTPCode, $OTPExpired);
 
@@ -67,41 +97,26 @@ class OTP
      */
     private function save(string $OTPCode, string $OTPExpired): bool
     {
-        // OTP builder
-        $OPTBuilder = $this->db->table('log_otp');
+        $builder = $this->db->table('log_otp');
+        $now     = Time::now()->toDateTimeString();
 
-        $now = Time::now();
+        // Hapus OTP lama yang belum digunakan untuk user & tipe ini
+        $builder->where([
+            'otp_type'          => $this->type,
+            'otp_user_type'     => $this->userType,
+            'otp_user_id'       => $this->userID,
+            'otp_used_datetime' => null,
+        ])->delete();
 
-        $startDay = Time::createFromTime(0, 0, 0)->toDateTimeString();
-        $endDay   = Time::createFromTime(23, 59, 59)->toDateTimeString();
-
-        // cek dulu apakah ada data sebelumnya
-        $OPTBuilder->where('otp_type', $this->type);
-        $OPTBuilder->where('otp_user_type', $this->userType);
-        $OPTBuilder->where('otp_user_id', $this->userID);
-        $OPTBuilder->where('otp_used_datetime IS NULL');
-        $OPTBuilder->where('otp_created_datetime >=', $startDay);
-        $OPTBuilder->where('otp_created_datetime <=', $endDay);
-
-        $datOTP = $OPTBuilder->get()->getRow();
-
-        if (! empty($datOTP)) {
-            // hapus data OTP lama
-            $OPTBuilder->where('otp_id', $datOTP->otp_id);
-            $OPTBuilder->delete();
-        }
-
-        $OPTBuilder->insert([
+        return $builder->insert([
             'otp_user_id'          => $this->userID,
             'otp_user_type'        => $this->userType,
             'otp_type'             => $this->type,
             'otp_value'            => password_hash($OTPCode, PASSWORD_DEFAULT),
             'otp_expired_datetime' => $OTPExpired,
-            'otp_updated_datetime' => $now->toDateTimeString(),
-            'otp_created_datetime' => $now->toDateTimeString(),
+            'otp_updated_datetime' => $now,
+            'otp_created_datetime' => $now,
         ]);
-
-        return (bool) ($this->db->affectedRows() > 0);
     }
 
     /**
@@ -110,44 +125,44 @@ class OTP
     public function verify(string $OTPCode): bool
     {
         if (empty($this->type)) {
-            throw new Exception('OTP type belum diset');
+            throw new RuntimeException('OTP type belum diset');
         }
 
-        $now = Time::now();
-
-        $startDay = Time::createFromTime(0, 0, 0)->toDateTimeString();
-        $endDay   = Time::createFromTime(23, 59, 59)->toDateTimeString();
-
         $data = $this->db->table('log_otp')
-            ->select('otp_id, otp_expired_datetime, otp_used_datetime, otp_value')
-            ->where('otp_user_id', $this->userID)
-            ->where('otp_user_type', $this->userType)
-            ->where('otp_type', $this->type)
-            ->where('otp_used_datetime IS NULL')
-            ->where('otp_created_datetime >=', $startDay)
-            ->where('otp_created_datetime <=', $endDay)
+            ->select('otp_id, otp_expired_datetime, otp_value, otp_used_datetime')
+            ->where([
+                'otp_user_id'   => $this->userID,
+                'otp_user_type' => $this->userType,
+                'otp_type'      => $this->type,
+            ])
+            ->orderBy('otp_id', 'DESC')
+            ->limit(1)
             ->get()
-            ->getRowObject();
+            ->getRow();
 
-        if (empty($data)) {
-            throw new Exception('Kode OTP salah / kode telah digunakan');
+        if (! $data) {
+            throw new Exception('Kode OTP tidak ditemukan');
+        }
+
+        if ($data->otp_used_datetime !== null) {
+            throw new Exception('Kode OTP sudah digunakan');
         }
 
         if (! password_verify($OTPCode, $data->otp_value)) {
             throw new Exception('Kode OTP tidak valid');
         }
 
-        if ($data->otp_expired_datetime < $now->toDateTimeString()) {
+        if (Time::now()->isAfter(Time::parse($data->otp_expired_datetime))) {
             throw new Exception('Kode OTP sudah kedaluwarsa');
         }
 
-        // model OTP
-        $this->db->table('log_otp')
-            ->set('otp_used_datetime', $now->toDateTimeString())
-            ->set('otp_updated_datetime', $now->toDateTimeString())
-            ->where('otp_id', $data->otp_id)
-            ->update();
+        $now = Time::now()->toDateTimeString();
 
-        return (bool) ($this->db->affectedRows() > 0);
+        return $this->db->table('log_otp')
+            ->where('otp_id', $data->otp_id)
+            ->update([
+                'otp_used_datetime'    => $now,
+                'otp_updated_datetime' => $now,
+            ]);
     }
 }
