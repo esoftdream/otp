@@ -21,6 +21,10 @@ class OTPTest extends TestCase
         $this->builder = $this->createMock(BaseBuilder::class);
         
         $this->db->method('table')->willReturn($this->builder);
+        $this->builder->method('select')->willReturnSelf();
+        $this->builder->method('where')->willReturnSelf();
+        $this->builder->method('orderBy')->willReturnSelf();
+        $this->builder->method('limit')->willReturnSelf();
     }
 
     public function testGenerateSuccess()
@@ -28,9 +32,6 @@ class OTPTest extends TestCase
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
 
-        $this->builder->method('where')->willReturnSelf();
-        
-        // delete() is now called directly with where array
         $this->builder->expects($this->once())
             ->method('delete');
 
@@ -67,14 +68,12 @@ class OTPTest extends TestCase
         $mockData = (object)[
             'otp_id' => 10,
             'otp_value' => $hashedValue,
-            'otp_expired_datetime' => $expiredAt
+            'otp_expired_datetime' => $expiredAt,
+            'otp_used_datetime' => null
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getRow')->willReturn($mockData);
-
-        $this->builder->method('select')->willReturnSelf();
-        $this->builder->method('where')->willReturnSelf();
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->builder->expects($this->once())
@@ -96,18 +95,43 @@ class OTPTest extends TestCase
         $mockData = (object)[
             'otp_id' => 10,
             'otp_value' => $hashedValue,
-            'otp_expired_datetime' => $expiredAt
+            'otp_expired_datetime' => $expiredAt,
+            'otp_used_datetime' => null
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getRow')->willReturn($mockData);
-
-        $this->builder->method('select')->willReturnSelf();
-        $this->builder->method('where')->willReturnSelf();
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->expectException(Exception::class);
         $this->expectExceptionMessage('Kode OTP sudah kedaluwarsa');
+
+        $otp->verify($otpValue);
+    }
+
+    public function testVerifyAlreadyUsedFails()
+    {
+        $otpValue = '123456';
+        $hashedValue = password_hash($otpValue, PASSWORD_DEFAULT);
+        $expiredAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'forgot';
+
+        // Mock data dengan otp_used_datetime yang sudah terisi
+        $mockData = (object)[
+            'otp_id' => 10,
+            'otp_value' => $hashedValue,
+            'otp_expired_datetime' => $expiredAt,
+            'otp_used_datetime' => date('Y-m-d H:i:s')
+        ];
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getRow')->willReturn($mockData);
+        $this->builder->method('get')->willReturn($resultMock);
+
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Kode OTP sudah digunakan');
 
         $otp->verify($otpValue);
     }
@@ -125,14 +149,12 @@ class OTPTest extends TestCase
         $mockData = (object)[
             'otp_id' => 10,
             'otp_value' => $hashedValue,
-            'otp_expired_datetime' => $expiredAt
+            'otp_expired_datetime' => $expiredAt,
+            'otp_used_datetime' => null
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getRow')->willReturn($mockData);
-
-        $this->builder->method('select')->willReturnSelf();
-        $this->builder->method('where')->willReturnSelf();
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->expectException(Exception::class);
@@ -148,13 +170,10 @@ class OTPTest extends TestCase
 
         $resultMock = $this->createMock(BaseResult::class);
         $resultMock->method('getRow')->willReturn(null);
-
-        $this->builder->method('select')->willReturnSelf();
-        $this->builder->method('where')->willReturnSelf();
         $this->builder->method('get')->willReturn($resultMock);
 
         $this->expectException(Exception::class);
-        $this->expectExceptionMessage('Kode OTP salah / kode telah digunakan');
+        $this->expectExceptionMessage('Kode OTP tidak ditemukan');
 
         $otp->verify('123456');
     }

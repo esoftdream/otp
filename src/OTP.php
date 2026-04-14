@@ -129,18 +129,23 @@ class OTP
         }
 
         $data = $this->db->table('log_otp')
-            ->select('otp_id, otp_expired_datetime, otp_value')
+            ->select('otp_id, otp_expired_datetime, otp_value, otp_used_datetime')
             ->where([
-                'otp_user_id'       => $this->userID,
-                'otp_user_type'     => $this->userType,
-                'otp_type'          => $this->type,
-                'otp_used_datetime' => null,
+                'otp_user_id'   => $this->userID,
+                'otp_user_type' => $this->userType,
+                'otp_type'      => $this->type,
             ])
+            ->orderBy('otp_id', 'DESC')
+            ->limit(1)
             ->get()
             ->getRow();
 
         if (! $data) {
-            throw new Exception('Kode OTP salah / kode telah digunakan');
+            throw new Exception('Kode OTP tidak ditemukan');
+        }
+
+        if ($data->otp_used_datetime !== null) {
+            throw new Exception('Kode OTP sudah digunakan');
         }
 
         if (! password_verify($OTPCode, $data->otp_value)) {
