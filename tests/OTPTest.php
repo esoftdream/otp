@@ -8,6 +8,7 @@ use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Database\BaseResult;
 use CodeIgniter\Database\BaseBuilder;
 use Exception;
+use RuntimeException;
 
 class OTPTest extends TestCase
 {
@@ -29,19 +30,13 @@ class OTPTest extends TestCase
 
         $this->builder->method('where')->willReturnSelf();
         
-        $resultMock = $this->createMock(BaseResult::class);
-        $resultMock->method('getRow')->willReturn(null);
-        $this->builder->method('get')->willReturn($resultMock);
-        
-        // delete() will NOT be called if getRow() is null
-        $this->builder->expects($this->never())
+        // delete() is now called directly with where array
+        $this->builder->expects($this->once())
             ->method('delete');
 
         $this->builder->expects($this->once())
             ->method('insert')
             ->willReturn(true);
-
-        $this->db->method('affectedRows')->willReturn(1);
 
         $result = $otp->generate();
 
@@ -54,7 +49,7 @@ class OTPTest extends TestCase
     {
         $otp = new OTP('member', 1, $this->db);
         
-        $this->expectException(Exception::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('OTP type belum diset');
         
         $otp->verify('123456');
@@ -76,18 +71,15 @@ class OTPTest extends TestCase
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
-        $resultMock->method('getRowObject')->willReturn($mockData);
+        $resultMock->method('getRow')->willReturn($mockData);
 
         $this->builder->method('select')->willReturnSelf();
         $this->builder->method('where')->willReturnSelf();
         $this->builder->method('get')->willReturn($resultMock);
-        $this->builder->method('set')->willReturnSelf();
 
         $this->builder->expects($this->once())
             ->method('update')
             ->willReturn(true);
-
-        $this->db->method('affectedRows')->willReturn(1);
 
         $this->assertTrue($otp->verify($otpValue));
     }
@@ -108,7 +100,7 @@ class OTPTest extends TestCase
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
-        $resultMock->method('getRowObject')->willReturn($mockData);
+        $resultMock->method('getRow')->willReturn($mockData);
 
         $this->builder->method('select')->willReturnSelf();
         $this->builder->method('where')->willReturnSelf();
@@ -137,7 +129,7 @@ class OTPTest extends TestCase
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
-        $resultMock->method('getRowObject')->willReturn($mockData);
+        $resultMock->method('getRow')->willReturn($mockData);
 
         $this->builder->method('select')->willReturnSelf();
         $this->builder->method('where')->willReturnSelf();
@@ -155,26 +147,7 @@ class OTPTest extends TestCase
         $otp->type = 'forgot';
 
         $resultMock = $this->createMock(BaseResult::class);
-        $resultMock->method('getRowObject')->willReturn(null);
-
-        $this->builder->method('select')->willReturnSelf();
-        $this->builder->method('where')->willReturnSelf();
-        $this->builder->method('get')->willReturn($resultMock);
-
-        $this->expectException(Exception::class);
-        $this->expectExceptionMessage('Kode OTP salah / kode telah digunakan');
-
-        $otp->verify('123456');
-    }
-
-    public function testVerifyWrongTypeFails()
-    {
-        // Skenario: Di DB ada OTP untuk type 'forgot', tapi kita verifikasi dengan type 'profile'
-        $otp = new OTP('member', 1, $this->db);
-        $otp->type = 'profile'; 
-
-        $resultMock = $this->createMock(BaseResult::class);
-        $resultMock->method('getRowObject')->willReturn(null); // Tidak ditemukan karena type beda
+        $resultMock->method('getRow')->willReturn(null);
 
         $this->builder->method('select')->willReturnSelf();
         $this->builder->method('where')->willReturnSelf();
