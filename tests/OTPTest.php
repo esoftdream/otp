@@ -195,4 +195,56 @@ class OTPTest extends TestCase
 
         $otp->verify('123456');
     }
+
+    public function testVerifyWithSpacesSuccess()
+    {
+        $otpValue = '123456';
+        $hashedValue = password_hash($otpValue, PASSWORD_DEFAULT);
+        $expiredAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'forgot';
+
+        $mockData = (object)[
+            'otp_id' => 10,
+            'otp_value' => $hashedValue,
+            'otp_expired_datetime' => $expiredAt,
+            'otp_used_datetime' => null
+        ];
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getRow')->willReturn($mockData);
+        $this->builder->method('get')->willReturn($resultMock);
+
+        $this->builder->method('update')->willReturn(true);
+
+        // Test dengan spasi di awal dan akhir
+        $this->assertTrue($otp->verify(' 123456 '));
+    }
+
+    public function testVerifyWithLeadingZerosSuccess()
+    {
+        $otpValue = '001234';
+        $hashedValue = password_hash($otpValue, PASSWORD_DEFAULT);
+        $expiredAt = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+
+        $otp = new OTP('member', 1, $this->db);
+        $otp->type = 'forgot';
+
+        $mockData = (object)[
+            'otp_id' => 10,
+            'otp_value' => $hashedValue,
+            'otp_expired_datetime' => $expiredAt,
+            'otp_used_datetime' => null
+        ];
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getRow')->willReturn($mockData);
+        $this->builder->method('get')->willReturn($resultMock);
+
+        $this->builder->method('update')->willReturn(true);
+
+        // Test dengan input '1234' untuk OTP asli '001234'
+        $this->assertTrue($otp->verify('1234'));
+    }
 }
