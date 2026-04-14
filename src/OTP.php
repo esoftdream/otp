@@ -128,6 +128,11 @@ class OTP
             throw new RuntimeException('OTP type belum diset');
         }
 
+        $OTPCode = trim($OTPCode);
+        if (is_numeric($OTPCode)) {
+            $OTPCode = str_pad($OTPCode, $this->otpLength, '0', STR_PAD_LEFT);
+        }
+
         $data = $this->db->table('log_otp')
             ->select('otp_id, otp_expired_datetime, otp_value, otp_used_datetime')
             ->where([
