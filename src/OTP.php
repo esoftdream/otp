@@ -93,7 +93,7 @@ class OTP
         $otpCode = str_pad((string) random_int(0, $max), $this->otpLength, '0', STR_PAD_LEFT);
 
         // Gunakan UTC untuk konsistensi di database
-        $now = Time::now('UTC');
+        $now = Time::now(app_timezone());
         $expiredAt = $now->addMinutes($this->expiryMinutes);
 
         if ($this->saveToDatabase($otpCode, $expiredAt)) {
@@ -111,7 +111,7 @@ class OTP
      */
     private function saveToDatabase(string $otpCode, Time $expiredAt): bool
     {
-        $now = Time::now('UTC')->toDateTimeString();
+        $now = Time::now(app_timezone())->toDateTimeString();
 
         // Catatan: Kita tidak menghapus OTP lama di sini agar lebih resilien 
         // jika ada delay pengiriman atau klik ganda oleh user.
@@ -162,7 +162,7 @@ class OTP
             throw new Exception('Kode OTP tidak ditemukan atau sudah digunakan');
         }
 
-        $now = Time::now('UTC');
+        $now = Time::now(app_timezone());
 
         // 3. Iterasi melalui semua kode aktif untuk mencari yang cocok
         foreach ($otpRecords as $data) {
@@ -170,7 +170,7 @@ class OTP
             if (password_verify($otpInput, $data->otp_value)) {
                 
                 // Cek Kedaluwarsa untuk record yang cocok ini
-                $expiredAt = Time::parse($data->otp_expired_datetime, 'UTC');
+                $expiredAt = Time::parse($data->otp_expired_datetime, app_timezone());
                 if ($now->isAfter($expiredAt)) {
                     throw new Exception('Kode OTP sudah kedaluwarsa');
                 }
@@ -188,7 +188,7 @@ class OTP
      */
     private function markAsUsed(int $otpId): bool
     {
-        $now = Time::now('UTC')->toDateTimeString();
+        $now = Time::now(app_timezone())->toDateTimeString();
 
         return $this->db->table('log_otp')
             ->where('otp_id', $otpId)

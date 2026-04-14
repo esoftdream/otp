@@ -49,7 +49,7 @@ class OTPTest extends TestCase
         
         $hashed1 = password_hash($otpValue1, PASSWORD_BCRYPT);
         $hashed2 = password_hash($otpValue2, PASSWORD_BCRYPT);
-        $expiredAt = Time::now('UTC')->addMinutes(10)->toDateTimeString();
+        $expiredAt = Time::now(app_timezone())->addMinutes(10)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
@@ -72,7 +72,7 @@ class OTPTest extends TestCase
     {
         $otpValue = '001234';
         $hashedValue = password_hash($otpValue, PASSWORD_BCRYPT);
-        $expiredAt = Time::now('UTC')->addMinutes(10)->toDateTimeString();
+        $expiredAt = Time::now(app_timezone())->addMinutes(10)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
@@ -100,8 +100,8 @@ class OTPTest extends TestCase
         $otpValue = '123456';
         $hashed = password_hash($otpValue, PASSWORD_BCRYPT);
         
-        $expiredTime = Time::now('UTC')->subMinutes(5)->toDateTimeString();
-        $validTime = Time::now('UTC')->addMinutes(10)->toDateTimeString();
+        $expiredTime = Time::now(app_timezone())->subMinutes(5)->toDateTimeString();
+        $validTime = Time::now(app_timezone())->addMinutes(10)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
@@ -164,7 +164,7 @@ class OTPTest extends TestCase
     {
         $otpValue = '123456';
         $hashedValue = password_hash($otpValue, PASSWORD_BCRYPT);
-        $expiredAt = Time::now('UTC')->subMinutes(1)->toDateTimeString();
+        $expiredAt = Time::now(app_timezone())->subMinutes(1)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
