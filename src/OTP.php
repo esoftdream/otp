@@ -92,14 +92,14 @@ class OTP
         $max     = pow(10, $this->otpLength) - 1;
         $otpCode = str_pad((string) random_int(0, $max), $this->otpLength, '0', STR_PAD_LEFT);
 
-        // Gunakan Asia/Jakarta untuk konsistensi di database
-        $now = Time::now('Asia/Jakarta');
+        // ✅ Gunakan UTC untuk konsistensi global
+        $now = Time::now('UTC');
         $expiredAt = $now->addMinutes($this->expiryMinutes);
 
-        if ($this->saveToDatabase($otpCode, $expiredAt)) {
+        if ($this->saveToDatabase($otpCode, $now, $expiredAt)) {
             return [
                 'otp'     => $otpCode,
-                'expired' => $expiredAt->toDateTimeString(),
+                'expired' => $expiredAt->toDateTimeString(), // UTC
             ];
         }
 
@@ -109,10 +109,8 @@ class OTP
     /**
      * Menyimpan OTP ke database
      */
-    private function saveToDatabase(string $otpCode, Time $expiredAt): bool
+    private function saveToDatabase(string $otpCode, Time $now, Time $expiredAt): bool
     {
-        $now = Time::now('Asia/Jakarta')->toDateTimeString();
-
         // Catatan: Kita tidak menghapus OTP lama di sini agar lebih resilien 
         // jika ada delay pengiriman atau klik ganda oleh user.
 
@@ -121,9 +119,9 @@ class OTP
             'otp_user_type'        => $this->userType,
             'otp_type'             => $this->type,
             'otp_value'            => password_hash($otpCode, PASSWORD_BCRYPT),
-            'otp_expired_datetime' => $expiredAt->toDateTimeString(),
-            'otp_created_datetime' => $now,
-            'otp_updated_datetime' => $now,
+            'otp_expired_datetime' => $expiredAt->toDateTimeString(), // UTC
+            'otp_created_datetime' => $now->toDateTimeString(),       // UTC
+            'otp_updated_datetime' => $now->toDateTimeString(),       // UTC
         ]);
     }
 
@@ -162,7 +160,8 @@ class OTP
             throw new Exception('Kode OTP tidak ditemukan atau sudah digunakan');
         }
 
-        $now = Time::now('Asia/Jakarta');
+        // ✅ Gunakan UTC
+        $now = Time::now('UTC');
 
         // 3. Iterasi melalui semua kode aktif untuk mencari yang cocok
         foreach ($otpRecords as $data) {
@@ -170,7 +169,8 @@ class OTP
             if (password_verify($otpInput, $data->otp_value)) {
                 
                 // Cek Kedaluwarsa untuk record yang cocok ini
-                $expiredAt = Time::parse($data->otp_expired_datetime, 'Asia/Jakarta');
+                $expiredAt = Time::parse($data->otp_expired_datetime, 'UTC');
+
                 if ($now->isAfter($expiredAt)) {
                     throw new Exception('Kode OTP sudah kedaluwarsa');
                 }
@@ -188,13 +188,23 @@ class OTP
      */
     private function markAsUsed(int $otpId): bool
     {
-        $now = Time::now('Asia/Jakarta')->toDateTimeString();
+        $now = Time::now('UTC');
 
         return $this->db->table('log_otp')
             ->where('otp_id', $otpId)
             ->update([
-                'otp_used_datetime'    => $now,
-                'otp_updated_datetime' => $now,
+                'otp_used_datetime'    => $now->toDateTimeString(), // UTC
+                'otp_updated_datetime' => $now->toDateTimeString(), // UTC
             ]);
+    }
+
+    /**
+     * OPTIONAL: Convert ke timezone user (misal Asia/Jakarta)
+     */
+    public static function toUserTimezone(string $datetime, string $tz = 'Asia/Jakarta'): string
+    {
+        return Time::parse($datetime, 'UTC')
+            ->setTimezone($tz)
+            ->toDateTimeString();
     }
 }
