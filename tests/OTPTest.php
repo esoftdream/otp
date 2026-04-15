@@ -49,26 +49,14 @@ class OTPTest extends TestCase
         
         $hashed1 = password_hash($otpValue1, PASSWORD_BCRYPT);
         $hashed2 = password_hash($otpValue2, PASSWORD_BCRYPT);
-
-        $now = Time::now('UTC');
-        $expiredAt = $now->addMinutes(10)->toDateTimeString();
+        $expiredAt = Time::now('Asia/Jakarta')->addMinutes(10)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
 
         $mockRecords = [
-            (object)[
-                'otp_id' => 101,
-                'otp_value' => $hashed1,
-                'otp_expired_datetime' => $expiredAt,
-                'otp_used_datetime' => null
-            ],
-            (object)[
-                'otp_id' => 100,
-                'otp_value' => $hashed2,
-                'otp_expired_datetime' => $expiredAt,
-                'otp_used_datetime' => null
-            ]
+            (object)['otp_id' => 101, 'otp_value' => $hashed1, 'otp_expired_datetime' => $expiredAt, 'otp_used_datetime' => null],
+            (object)['otp_id' => 100, 'otp_value' => $hashed2, 'otp_expired_datetime' => $expiredAt, 'otp_used_datetime' => null]
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
@@ -84,9 +72,7 @@ class OTPTest extends TestCase
     {
         $otpValue = '001234';
         $hashedValue = password_hash($otpValue, PASSWORD_BCRYPT);
-
-        $now = Time::now('UTC');
-        $expiredAt = $now->addMinutes(10)->toDateTimeString();
+        $expiredAt = Time::now('Asia/Jakarta')->addMinutes(10)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
@@ -109,31 +95,20 @@ class OTPTest extends TestCase
 
     public function testVerifyOneExpiredOneValidSuccess()
     {
-        // Skenario: Ada 2 record dengan kode yang sama
+        // Skenario: Ada 2 record dengan kode yang sama (mungkin generate ulang kode yang sama secara kebetulan)
+        // Yang satu sudah expired, yang satu masih valid.
         $otpValue = '123456';
         $hashed = password_hash($otpValue, PASSWORD_BCRYPT);
         
-        $now = Time::now('UTC');
-
-        $expiredTime = $now->subMinutes(5)->toDateTimeString();
-        $validTime   = $now->addMinutes(10)->toDateTimeString();
+        $expiredTime = Time::now('Asia/Jakarta')->subMinutes(5)->toDateTimeString();
+        $validTime = Time::now('Asia/Jakarta')->addMinutes(10)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
 
         $mockRecords = [
-            (object)[
-                'otp_id' => 101,
-                'otp_value' => $hashed,
-                'otp_expired_datetime' => $validTime,
-                'otp_used_datetime' => null
-            ],
-            (object)[
-                'otp_id' => 100,
-                'otp_value' => $hashed,
-                'otp_expired_datetime' => $expiredTime,
-                'otp_used_datetime' => null
-            ]
+            (object)['otp_id' => 101, 'otp_value' => $hashed, 'otp_expired_datetime' => $validTime, 'otp_used_datetime' => null],
+            (object)['otp_id' => 100, 'otp_value' => $hashed, 'otp_expired_datetime' => $expiredTime, 'otp_used_datetime' => null]
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
@@ -141,7 +116,7 @@ class OTPTest extends TestCase
         $this->builder->method('get')->willReturn($resultMock);
         $this->builder->method('update')->willReturn(true);
 
-        // Harus berhasil karena menemukan yang masih valid
+        // Harus berhasil karena menemukan yang ID 101 yang masih valid
         $this->assertTrue($otp->verify($otpValue));
     }
 
@@ -149,29 +124,15 @@ class OTPTest extends TestCase
     {
         $otpValue1 = '111111';
         $otpValue2 = '222222';
-
         $hashed1 = password_hash($otpValue1, PASSWORD_BCRYPT);
         $hashed2 = password_hash($otpValue2, PASSWORD_BCRYPT);
-
-        $now = Time::now('UTC');
-        $validTime = $now->addMinutes(10)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
 
         $mockRecords = [
-            (object)[
-                'otp_id' => 101,
-                'otp_value' => $hashed1,
-                'otp_expired_datetime' => $validTime,
-                'otp_used_datetime' => null
-            ],
-            (object)[
-                'otp_id' => 100,
-                'otp_value' => $hashed2,
-                'otp_expired_datetime' => $validTime,
-                'otp_used_datetime' => null
-            ]
+            (object)['otp_id' => 101, 'otp_value' => $hashed1, 'otp_expired_datetime' => 'any', 'otp_used_datetime' => null],
+            (object)['otp_id' => 100, 'otp_value' => $hashed2, 'otp_expired_datetime' => 'any', 'otp_used_datetime' => null]
         ];
 
         $resultMock = $this->createMock(BaseResult::class);
@@ -203,9 +164,7 @@ class OTPTest extends TestCase
     {
         $otpValue = '123456';
         $hashedValue = password_hash($otpValue, PASSWORD_BCRYPT);
-
-        $now = Time::now('UTC');
-        $expiredAt = $now->subMinutes(1)->toDateTimeString();
+        $expiredAt = Time::now('Asia/Jakarta')->subMinutes(1)->toDateTimeString();
 
         $otp = new OTP('member', 1, $this->db);
         $otp->type = 'forgot';
