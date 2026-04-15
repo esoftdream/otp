@@ -14,14 +14,34 @@ use RuntimeException;
  */
 class OTP
 {
+    /**
+     * @var string Tipe OTP (contoh: 'forgot', 'login', 'transfer')
+     */
     public string $type = '';
 
+    /**
+     * @var string Tipe user ('admin' atau 'member')
+     */
     private string $userType;
+
+    /**
+     * @var int ID user
+     */
     private int $userId;
 
+    /**
+     * @var int Masa berlaku OTP dalam menit
+     */
     protected int $expiryMinutes = 10;
+
+    /**
+     * @var int Panjang kode OTP
+     */
     protected int $otpLength = 6;
 
+    /**
+     * @var BaseConnection Koneksi database
+     */
     private BaseConnection $db;
 
     /**
