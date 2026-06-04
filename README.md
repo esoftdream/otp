@@ -26,16 +26,31 @@ php spark migrate:latest -n Esoftdream\OTP
 
 ### 1. Inisialisasi
 
+Ada dua cara untuk menginisialisasi modul ini, tergantung apakah User ID sudah tersedia atau belum:
+
+#### A. Menggunakan User ID (Kasus Umum)
+Gunakan cara ini jika user sudah terdaftar di database (misalnya untuk Forgot Password, Verifikasi Transaksi, dll):
 ```php
 use Esoftdream\OTP\OTP;
 
-// Inisialisasi dengan tipe user ('member'/'admin') dan ID user
+// Parameter: userType, userId
 $otp = new OTP('member', 123);
+$otp->type = 'forgot_password'; // Wajib set tipe kegunaan OTP
+```
 
-// Set tipe kegunaan OTP (Wajib)
-$otp->type = 'forgot_password'; 
+#### B. Menggunakan Identifier (Kasus Registrasi / User belum ada)
+Jika User ID belum dibuat di database (misalnya verifikasi email/telepon saat registrasi), Anda bisa menggunakan *identifier* unik seperti email atau nomor telepon sebagai gantinya:
+```php
+use Esoftdream\OTP\OTP;
 
-// Opsional: Set panjang kode (default 6) dan masa berlaku (default 10 menit)
+// Parameter: userType, userId (null), db connection (null), identifier
+$otp = new OTP('member', null, null, 'john.doe@example.com');
+$otp->type = 'registration';
+```
+
+#### Pengaturan Opsional
+Anda juga bisa mengatur panjang kode OTP (default 6 digit) dan masa berlaku (default 10 menit):
+```php
 $otp->setLength(6)->setExpiry(5);
 ```
 

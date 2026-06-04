@@ -25,9 +25,14 @@ class OTP
     private string $userType;
 
     /**
-     * @var int ID user
+     * @var int|null ID user
      */
-    private int $userId;
+    private ?int $userId = null;
+
+    /**
+     * @var string|null Identifier (email/telepon/session) jika userId tidak ada
+     */
+    private ?string $identifier = null;
 
     /**
      * @var int Masa berlaku OTP dalam menit
@@ -49,11 +54,20 @@ class OTP
      */
     private string $tz = 'Asia/Jakarta';
 
-    public function __construct(string $userType, int $userId, ?BaseConnection $db = null)
-    {
+    public function __construct(
+        string $userType,
+        ?int $userId = null,
+        ?BaseConnection $db = null,
+        ?string $identifier = null
+    ) {
         $this->db = $db ?? Database::connect();
         $this->userType = $userType;
         $this->userId = $userId;
+        $this->identifier = $identifier;
+
+        if ($this->userId === null && empty($this->identifier)) {
+            throw new \InvalidArgumentException('User ID atau Identifier harus diisi salah satu.');
+        }
     }
 
     public function setExpiry(int $minutes): self
@@ -99,6 +113,7 @@ class OTP
 
         return $this->db->table('log_otp')->insert([
             'otp_user_id'          => $this->userId,
+            'otp_identifier'       => $this->identifier,
             'otp_user_type'        => $this->userType,
             'otp_type'             => $this->type,
             'otp_value'            => password_hash($otpCode, PASSWORD_BCRYPT),
@@ -119,13 +134,20 @@ class OTP
         $otpInput = str_pad($otpInput, $this->otpLength, '0', STR_PAD_LEFT);
 
         // 2. Ambil OTP aktif
+        $where = [
+            'otp_user_type'     => $this->userType,
+            'otp_type'          => $this->type,
+            'otp_used_datetime' => null,
+        ];
+
+        if ($this->userId !== null) {
+            $where['otp_user_id'] = $this->userId;
+        } else {
+            $where['otp_identifier'] = $this->identifier;
+        }
+
         $otpRecords = $this->db->table('log_otp')
-            ->where([
-                'otp_user_id'       => $this->userId,
-                'otp_user_type'     => $this->userType,
-                'otp_type'          => $this->type,
-                'otp_used_datetime' => null,
-            ])
+            ->where($where)
             ->orderBy('otp_id', 'DESC')
             ->limit(10)
             ->get()

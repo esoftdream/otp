@@ -185,4 +185,71 @@ class OTPTest extends TestCase
 
         $otp->verify($otpValue);
     }
+
+    public function testConstructorThrowsExceptionWhenBothNull()
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('User ID atau Identifier harus diisi salah satu.');
+
+        new OTP('member', null, $this->db, null);
+    }
+
+    public function testGenerateWithIdentifierSuccess()
+    {
+        // Inisialisasi dengan identifier dan userId = null
+        $otp = new OTP('member', null, $this->db, 'john@example.com');
+        $otp->type = 'forgot';
+
+        $this->builder->expects($this->once())
+            ->method('insert')
+            ->with($this->callback(function ($data) {
+                return $data['otp_user_id'] === null && $data['otp_identifier'] === 'john@example.com';
+            }))
+            ->willReturn(true);
+
+        $result = $otp->generate();
+
+        $this->assertArrayHasKey('otp', $result);
+        $this->assertArrayHasKey('expired', $result);
+        $this->assertEquals(6, strlen($result['otp']));
+    }
+
+    public function testVerifyWithIdentifierSuccess()
+    {
+        $otpValue = '123456';
+        $hashedValue = password_hash($otpValue, PASSWORD_BCRYPT);
+        $expiredAt = Time::now('Asia/Jakarta')->addMinutes(10)->toDateTimeString();
+
+        // Inisialisasi dengan identifier dan userId = null
+        $otp = new OTP('member', null, $this->db, 'john@example.com');
+        $otp->type = 'forgot';
+
+        $mockRecords = [(object)[
+            'otp_id' => 10,
+            'otp_value' => $hashedValue,
+            'otp_expired_datetime' => $expiredAt,
+            'otp_used_datetime' => null
+        ]];
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getResult')->willReturn($mockRecords);
+        $this->builder->method('get')->willReturn($resultMock);
+        $this->builder->method('update')->willReturn(true);
+
+        // Verifikasi bahwa query where menggunakan otp_identifier, bukan otp_user_id
+        $whereCalls = [];
+        $this->builder->method('where')->willReturnCallback(function ($key, $value = null) use (&$whereCalls) {
+            $whereCalls[] = $key;
+            return $this->builder;
+        });
+
+        $this->assertTrue($otp->verify($otpValue));
+
+        $this->assertCount(2, $whereCalls);
+        $firstWhere = $whereCalls[0];
+        $this->assertIsArray($firstWhere);
+        $this->assertArrayNotHasKey('otp_user_id', $firstWhere);
+        $this->assertEquals('john@example.com', $firstWhere['otp_identifier']);
+        $this->assertEquals('otp_id', $whereCalls[1]);
+    }
 }
