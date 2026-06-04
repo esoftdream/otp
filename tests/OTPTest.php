@@ -237,13 +237,19 @@ class OTPTest extends TestCase
         $this->builder->method('update')->willReturn(true);
 
         // Verifikasi bahwa query where menggunakan otp_identifier, bukan otp_user_id
-        $this->builder->expects($this->once())
-            ->method('where')
-            ->with($this->callback(function ($where) {
-                return !isset($where['otp_user_id']) && $where['otp_identifier'] === 'john@example.com';
-            }))
-            ->willReturnSelf();
+        $whereCalls = [];
+        $this->builder->method('where')->willReturnCallback(function ($key, $value = null) use (&$whereCalls) {
+            $whereCalls[] = $key;
+            return $this->builder;
+        });
 
         $this->assertTrue($otp->verify($otpValue));
+
+        $this->assertCount(2, $whereCalls);
+        $firstWhere = $whereCalls[0];
+        $this->assertIsArray($firstWhere);
+        $this->assertArrayNotHasKey('otp_user_id', $firstWhere);
+        $this->assertEquals('john@example.com', $firstWhere['otp_identifier']);
+        $this->assertEquals('otp_id', $whereCalls[1]);
     }
 }
