@@ -22,6 +22,7 @@ class OTPTest extends TestCase
         $this->builder = $this->createMock(BaseBuilder::class);
         
         $this->db->method('table')->willReturn($this->builder);
+        $this->db->method('affectedRows')->willReturn(1);
         $this->builder->method('where')->willReturnSelf();
         $this->builder->method('orderBy')->willReturnSelf();
         $this->builder->method('limit')->willReturnSelf();
@@ -245,11 +246,47 @@ class OTPTest extends TestCase
 
         $this->assertTrue($otp->verify($otpValue));
 
-        $this->assertCount(2, $whereCalls);
+        $this->assertCount(3, $whereCalls);
         $firstWhere = $whereCalls[0];
         $this->assertIsArray($firstWhere);
         $this->assertArrayNotHasKey('otp_user_id', $firstWhere);
         $this->assertEquals('john@example.com', $firstWhere['otp_identifier']);
         $this->assertEquals('otp_id', $whereCalls[1]);
+        $this->assertEquals('otp_used_datetime', $whereCalls[2]);
+    }
+
+    public function testVerifyReturnsFalseOnConcurrentDoubleHit()
+    {
+        $otpValue = '123456';
+        $hashedValue = password_hash($otpValue, PASSWORD_BCRYPT);
+        $expiredAt = Time::now('Asia/Jakarta')->addMinutes(10)->toDateTimeString();
+
+        $db = $this->createMock(BaseConnection::class);
+        $builder = $this->createMock(BaseBuilder::class);
+
+        $db->method('table')->willReturn($builder);
+        // Simulate concurrent request winning the race: 0 affected rows
+        $db->method('affectedRows')->willReturn(0);
+        $builder->method('where')->willReturnSelf();
+        $builder->method('orderBy')->willReturnSelf();
+        $builder->method('limit')->willReturnSelf();
+        $builder->method('update')->willReturn(true);
+
+        $otp = new OTP('member', 1, $db);
+        $otp->type = 'forgot';
+
+        $mockRecords = [(object)[
+            'otp_id' => 10,
+            'otp_value' => $hashedValue,
+            'otp_expired_datetime' => $expiredAt,
+            'otp_used_datetime' => null
+        ]];
+
+        $resultMock = $this->createMock(BaseResult::class);
+        $resultMock->method('getResult')->willReturn($mockRecords);
+        $builder->method('get')->willReturn($resultMock);
+
+        // When affectedRows is 0, verify() returns false (atomic double-hit prevention)
+        $this->assertFalse($otp->verify($otpValue));
     }
 }
