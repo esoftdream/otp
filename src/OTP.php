@@ -181,11 +181,19 @@ class OTP
     {
         $now = Time::now($this->tz);
 
-        return $this->db->table('log_otp')
+        $this->db->table('log_otp')
             ->where('otp_id', $otpId)
+            ->where('otp_used_datetime', null) // only mark used if still unused
             ->update([
                 'otp_used_datetime'    => $now->toDateTimeString(),
                 'otp_updated_datetime' => $now->toDateTimeString(),
             ]);
+
+        // Atomic guard against double-hit / TOCTOU.
+        // When two concurrent requests verify the same OTP code, only the first one
+        // succeeds (affectedRows == 1); the loser returns false and is rejected.
+        // affectedRows() is used (not the update() return) because update() returns
+        // true as long as the query runs successfully even with 0 rows affected.
+        return $this->db->affectedRows() > 0;
     }
 }
